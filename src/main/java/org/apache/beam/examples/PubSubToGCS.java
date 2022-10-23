@@ -2,8 +2,14 @@ package org.apache.beam.examples;
 
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.logging.Logger;
 
+import com.google.api.services.bigquery.model.TableFieldSchema;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.api.services.bigquery.model.TableSchema;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.apache.beam.examples.common.WriteOneFilePerWindow;
@@ -11,20 +17,18 @@ import org.apache.beam.examples.models.Event;
 import org.apache.beam.examples.models.FlatEvent;
 import org.apache.beam.examples.util.E;
 import org.apache.beam.sdk.Pipeline;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
-import org.apache.beam.sdk.options.Default;
-import org.apache.beam.sdk.options.Description;
-import org.apache.beam.sdk.options.PipelineOptions;
-import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.options.StreamingOptions;
+import org.apache.beam.sdk.options.*;
 import org.apache.beam.sdk.options.Validation.Required;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.Window;
-import org.apache.beam.sdk.values.PCollection;
 import org.joda.time.Duration;
+
+import static org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED;
+import static org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition.WRITE_APPEND;
 
 public class PubSubToGCS {
     static final Logger LOGGER = Logger.getLogger(PubSubToGCS.class.getSimpleName());
@@ -57,29 +61,43 @@ public class PubSubToGCS {
         String getRegion();
 
         void setRegion(String value);
+        @Description("BigQuery Data Set")
+        @Default.String("events_dataset.events_table")
+        String getBigQueryDS();
+        void setBigQueryDS(String value);
+        @Description("Output Topic")
+        @Default.String("=projects/thermal-effort-366015/topics/flatEventTopic")
+        String getOutputTopic();
+        void setOutputTopic(String value);
     }
 
     // The DoFn to count length of each element in the input PCollection.
     static class FlattenEventRecord extends DoFn<String, String> {
         @ProcessElement
-        public void processElement(@Element String word,
+        public void processElement(@Element String json,
                                    OutputReceiver<String> out) {
 
-           Event e = GSON.fromJson(word,Event.class);
+           Event e = GSON.fromJson(json,Event.class);
            FlatEvent  f = new FlatEvent();
+           if (e.getCityPlace() != null) {
+               f.setCityId(e.getCityPlace().cityId);
+               f.setCityName(e.getCityPlace().cityName);
+               f.setLatitude(e.getCityPlace().geometry.location.lat);
+               f.setLongitude(e.getCityPlace().geometry.location.lng);
+               f.setPlaceId(e.getCityPlace().place_id);
+               f.setPlaceName(e.getCityPlace().name);
+               f.setTypes(e.getCityPlace().types);
+               f.setVicinity(e.getCityPlace().vicinity);
+           } else {
+               LOGGER.info(E.RED_DOT + E.RED_DOT + " CityPlace is NULL");
+           }
            f.setAmount(e.getAmount());
-           f.setCityId(e.getCityPlace().cityId);
-           f.setCityName(e.getCityPlace().cityName);
            f.setDate(e.getDate());
            f.setEventId(e.getEventId());
-           f.setLatitude(e.getCityPlace().geometry.location.lat);
            f.setLongDate(e.getLongDate());
-           f.setLongitude(e.getCityPlace().geometry.location.lng);
-           f.setPlaceId(e.getCityPlace().place_id);
-           f.setPlaceName(e.getCityPlace().name);
+
            f.setRating(e.getRating());
-           f.setTypes(e.getCityPlace().types);
-           f.setVicinity(e.getCityPlace().vicinity);
+
            String outJson = GSON.toJson(f);
             LOGGER.info(E.CHECK + E.CHECK +
                     " Flattened Record, rating: " + f.getRating() + " - " + f.getPlaceName());
@@ -88,21 +106,65 @@ public class PubSubToGCS {
         }
     }
 
+    static class WriteToBigQuery extends DoFn<String, String> {
+        @ProcessElement
+        public void processElement(@Element String json,
+                                   OutputReceiver<String> out) {
+            BigQueryIO.Write<TableRow> o = BigQueryIO.writeTableRows()
+                    .to(biqQueryName)
+                    .withCreateDisposition(CREATE_IF_NEEDED)
+                    .withWriteDisposition(WRITE_APPEND)
+                    .withMethod(BigQueryIO.Write.Method.STREAMING_INSERTS)
+                    .withSchema(getTableSchema());
+            try {
+                LOGGER.info(E.YELLOW_STAR+" Table: " + Objects.requireNonNull(o.getTable()).get().toPrettyString());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            FlatEvent f = GSON.fromJson(json, FlatEvent.class);
+            LOGGER.info(E.RED_APPLE + E.RED_APPLE +
+                    " BigQuery Record, rating: " + f.getRating() + " - " + f.getPlaceName());
+
+            out.output(json);
+        }
+    }
+    static class WriteToPubSub extends DoFn<String, String> {
+        @ProcessElement
+        public void processElement(@Element String json,
+                                   OutputReceiver<String> outputReceiver) {
+            PubsubIO.Write<String> w = PubsubIO.writeStrings().to(options.getOutputTopic());
+
+            LOGGER.info(E.YELLOW_STAR+" PubSub : " + options.getOutputTopic());
+
+            FlatEvent f = GSON.fromJson(json, FlatEvent.class);
+            LOGGER.info(E.RED_APPLE + E.RED_APPLE +
+                    " PubSub Record, rating: " + f.getRating() + " - " + f.getPlaceName());
+
+            outputReceiver.output(json);
+        }
+    }
+    static PubSubToGcsOptions options;
+    static String biqQueryName;
     public static void main(String[] args) throws IOException {
         // The maximum number of shards when writing output.
         int numShards = 1;
 
-        PubSubToGcsOptions options =
+         options =
                 PipelineOptionsFactory.fromArgs(args).withValidation().as(PubSubToGcsOptions.class);
+//        biqQueryName = "thermal-effort-366015" + "." + options.getBigQueryDS();
+//        LOGGER.info(E.RED_APPLE + E.RED_APPLE + " BigQuery: " + biqQueryName);
 
         options.setStreaming(true);
         Pipeline pipeline = Pipeline.create(options);
+
         pipeline
                 // 1) Read string messages from a Pub/Sub topic.
                 .apply("Read PubSub Messages", readPubSub(options))
                 // 2) Group the messages into fixed-sized minute intervals.
                 .apply(Window.into(FixedWindows.of(Duration.standardMinutes(options.getWindowSize()))))
-                .apply(ParDo.of(new FlattenEventRecord()))
+                .apply("Flatten Event Record",ParDo.of(new FlattenEventRecord()))
+//                .apply("Write Event to BigQuery",ParDo.of(new WriteToBigQuery()))
+//                .apply("Sending Pub/sub",ParDo.of(new WriteToPubSub()))
                 // 3) Write one file to GCS for every window of messages.
                 .apply("Write File to GCS", writeToGCS(numShards, options));
 
@@ -110,8 +172,25 @@ public class PubSubToGCS {
         pipeline.run().waitUntilFinish();
     }
 
+    private static TableSchema getTableSchema() {
+        List<TableFieldSchema> fields = new ArrayList<>();
+        fields.add(new TableFieldSchema().setName("eventId").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("placeId").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("placeName").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("cityId").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("cityName").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("rating").setType("INTEGER"));
+        fields.add(new TableFieldSchema().setName("date").setType("STRING"));
+        fields.add(new TableFieldSchema().setName("amount").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("latitude").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("longitude").setType("FLOAT"));
+        fields.add(new TableFieldSchema().setName("vicinity").setType("STRING"));
+        return new TableSchema().setFields(fields);
+    }
+
     private static WriteOneFilePerWindow writeToGCS(int numShards, PubSubToGcsOptions options) {
-        LOGGER.info(E.LEAF + " Writing FlatEvent to GCS ...");
+        LOGGER.info(E.LEAF + E.LEAF + E.LEAF +
+                " Writing FlatEvent to GCS ...");
         return new WriteOneFilePerWindow(
                 options.getOutput(), numShards);
     }

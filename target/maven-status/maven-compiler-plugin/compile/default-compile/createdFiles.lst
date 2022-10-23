@@ -10,6 +10,7 @@ org/apache/beam/examples/subprocess/SubProcessPipelineOptions$SubProcessConfigur
 org/apache/beam/examples/subprocess/utils/FileUtils.class
 org/apache/beam/examples/PubSubToGCS$FlattenEventRecord.class
 org/apache/beam/examples/subprocess/ExampleEchoPipeline.class
+org/apache/beam/examples/PubSubToGCS$WriteToPubSub.class
 org/apache/beam/examples/models/Root.class
 org/apache/beam/examples/subprocess/SubProcessPipelineOptions.class
 org/apache/beam/examples/subprocess/kernel/SubProcessIOFiles.class
@@ -25,6 +26,7 @@ org/apache/beam/examples/subprocess/utils/CallingSubProcessUtils$Permit.class
 org/apache/beam/examples/common/ExampleBigQueryTableOptions.class
 org/apache/beam/examples/common/ExampleBigQueryTableOptions$BigQueryTableFactory.class
 org/apache/beam/examples/util/E.class
+org/apache/beam/examples/PubSubToGCS$WriteToBigQuery.class
 org/apache/beam/examples/models/Event.class
 org/apache/beam/examples/subprocess/kernel/SubProcessCommandLineArgs$Command.class
 org/apache/beam/examples/subprocess/configuration/SubProcessConfiguration.class

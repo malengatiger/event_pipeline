@@ -13,7 +13,13 @@ mvn -Pdataflow-runner compile exec:java \
     --runner=DataflowRunner \
     --region=europe-west1"
 
-
+java -jar target/event_pipeline-bundled-0.1.jar \
+  --project=thermal-effort-366015 \
+  --region=europe-west1 \
+  --tempLocation=gs://thermal-effort-366015/aubsbucket01/temp \
+  --output=gs://thermal-effort-366015/aubsbucket01/output \
+  --inputTopic=projects/thermal-effort-366015/topics/eventTopic \
+  --outputTopic=projects/thermal-effort-366015/topics/EventTopic
 
 
 gcloud projects get-iam-policy $PROJECT  \
@@ -21,11 +27,11 @@ gcloud projects get-iam-policy $PROJECT  \
 --flatten="bindings[].members" \
 --filter="bindings.members:$USER_EMAIL"
 
-gcloud dataflow jobs run jobfromide \
---gcs-location gs://dataflow-templates-us-central1/latest/Word_Count \
---region $REGION \
---staging-location gs://$PROJECT/tmp \
---parameters inputFile=gs://dataflow-samples/shakespeare/kinglear.txt,output=gs://$PROJECT/results/outputs
+gcloud dataflow jobs run eventpipeline \
+--gcs-location gs://aubsbucket01/event_pipeline-0.1.jar \
+--region europe-west1 \
+--staging-location gs://thermal-effort-366015/tmp \
+--parameters inputTopic=projects/thermal-effort-366015/topics/eventTopic,gcpTempLocation=gs://aubsbucket01/temp/
 
 mvn compile exec:java \
   -Dexec.mainClass=org.apache.beam.examples.PubSubToGCS \

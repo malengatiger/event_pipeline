@@ -20,6 +20,9 @@ package org.apache.beam.examples.common;
 import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.MoreObjects.firstNonNull;
 
 import javax.annotation.Nullable;
+
+import org.apache.beam.examples.PubSubToGCS;
+import org.apache.beam.examples.util.E;
 import org.apache.beam.sdk.io.FileBasedSink;
 import org.apache.beam.sdk.io.FileBasedSink.FilenamePolicy;
 import org.apache.beam.sdk.io.FileBasedSink.OutputFileHints;
@@ -36,6 +39,8 @@ import org.apache.beam.sdk.values.PDone;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 
+import java.util.logging.Logger;
+
 /**
  * A {@link DoFn} that writes elements to files with names deterministically derived from the lower
  * and upper bounds of their key (an {@link IntervalWindow}).
@@ -47,6 +52,8 @@ public class WriteOneFilePerWindow extends PTransform<PCollection<String>, PDone
   private static final DateTimeFormatter FORMATTER = ISODateTimeFormat.hourMinute();
   private final String filenamePrefix;
   @Nullable private final Integer numShards;
+  static final Logger LOGGER = Logger.getLogger(WriteOneFilePerWindow.class.getSimpleName());
+
 
   public WriteOneFilePerWindow(String filenamePrefix, Integer numShards) {
     this.filenamePrefix = filenamePrefix;
@@ -64,6 +71,8 @@ public class WriteOneFilePerWindow extends PTransform<PCollection<String>, PDone
     if (numShards != null) {
       write = write.withNumShards(numShards);
     }
+    LOGGER.info(E.ORANGE_HEART+E.ORANGE_HEART+
+            " ... inside expand, writing to GCS: " + write.getName());
     return input.apply(write);
   }
 
