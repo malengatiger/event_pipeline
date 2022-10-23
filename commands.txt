@@ -1,0 +1,68 @@
+PROJECT=`gcloud config list --format 'value(core.project)'`
+USER_EMAIL=`gcloud config list account --format "value(core.account)"`
+REGION=europe-west1
+
+gsutil mb -p $PROJECT -b on gs://$PROJECT
+
+mvn -Pdataflow-runner compile exec:java \
+    -Dexec.mainClass=org.apache.beam.examples.PubSubToGCS \
+    -Dexec.args="--project=thermal-effort-366015 \
+    --inputTopic=projects/thermal-effort-366015/topics/eventTopic \
+    --gcpTempLocation=gs://aubsbucket01/temp/ \
+    --output=gs://aubsbucket01/output \
+    --runner=DataflowRunner \
+    --region=europe-west1"
+
+
+
+
+gcloud projects get-iam-policy $PROJECT  \
+--format='table(bindings.role)' \
+--flatten="bindings[].members" \
+--filter="bindings.members:$USER_EMAIL"
+
+gcloud dataflow jobs run jobfromide \
+--gcs-location gs://dataflow-templates-us-central1/latest/Word_Count \
+--region $REGION \
+--staging-location gs://$PROJECT/tmp \
+--parameters inputFile=gs://dataflow-samples/shakespeare/kinglear.txt,output=gs://$PROJECT/results/outputs
+
+mvn compile exec:java \
+  -Dexec.mainClass=org.apache.beam.examples.PubSubToGCS \
+  -Dexec.cleanupDaemonThreads=false \
+  -Dexec.args=" \
+    --project=$PROJECT_ID \
+    --region=$REGION \
+    --inputTopic=projects/$PROJECT_ID/topics/$TOPIC_ID \
+    --output=gs://$BUCKET_NAME/samples/output \
+    --gcpTempLocation=gs://$BUCKET_NAME/temp \
+    --windowSize=2"
+
+THIS WORKS!
+gcloud dataflow jobs run pubsubjob \
+--project=$PROJECT_ID \
+--region $REGION \
+--staging-location gs://$PROJECT/tmp \
+--parameters inputTopic=projects/$PROJECT_ID/topics/$TOPIC_ID,output=gs://$PROJECT/results/events
+
+mvn compile exec:java -Dexec.mainClass=org.apache.beam.examples.DebuggingWordCount \
+   -Dexec.args="--runner=DataflowRunner --gcpTempLocation=gs://$PROJECT/tmp \
+                --project=$PROJECT --region=$REGION \
+                --inputFile=gs://apache-beam-samples/shakespeare/* --output=gs://$PROJECT/counts" \
+     -Pdataflow-runner
+
+mvn -Pdataflow-runner compile \
+    exec:java \
+    -Dexec.mainClass=org.apache.beam.examples.WordCount \
+    -Dexec.args="--project=thermal-effort-366015 \
+    --gcpTempLocation=gs://aubsdataengineering/temp/ \
+    --output=gs://aubsdataengineering/results/output \
+    --runner=DataflowRunner \
+    --region=europe-west1" \
+    -Pdataflow-runner
+
+mvn compile exec:java -Dexec.mainClass=org.apache.beam.examples.WordCount \
+     -Dexec.args="--runner=DataflowRunner --gcpTempLocation=gs://aubsdataengineering/tmp \
+                  --project=thermal-effort-366015 --region=europe-west1 \
+                  --inputFile=gs://apache-beam-samples/shakespeare/* --output=gs://aubsdataengineering/counts" \
+     -Pdataflow-runner
