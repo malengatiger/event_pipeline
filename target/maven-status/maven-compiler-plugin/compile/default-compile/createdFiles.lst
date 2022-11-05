@@ -10,7 +10,6 @@ org/apache/beam/examples/subprocess/SubProcessPipelineOptions$SubProcessConfigur
 org/apache/beam/examples/subprocess/utils/FileUtils.class
 org/apache/beam/examples/PubSubToGCS$FlattenEventRecord.class
 org/apache/beam/examples/subprocess/ExampleEchoPipeline.class
-org/apache/beam/examples/PubSubToGCS$WriteToPubSub.class
 org/apache/beam/examples/models/Root.class
 org/apache/beam/examples/subprocess/SubProcessPipelineOptions.class
 org/apache/beam/examples/subprocess/kernel/SubProcessIOFiles.class

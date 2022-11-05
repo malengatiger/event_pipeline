@@ -58,11 +58,15 @@ public class WriteOneFilePerWindow extends PTransform<PCollection<String>, PDone
   public WriteOneFilePerWindow(String filenamePrefix, Integer numShards) {
     this.filenamePrefix = filenamePrefix;
     this.numShards = numShards;
+    LOGGER.info(E.PEAR+" WriteOneFilePerWindow: filenamePrefix: "
+            + filenamePrefix  + " " + E.PEAR+E.PEAR);
   }
 
   @Override
   public PDone expand(PCollection<String> input) {
     ResourceId resource = FileBasedSink.convertToFileResourceIfPossible(filenamePrefix);
+    LOGGER.info(E.ORANGE_HEART+E.ORANGE_HEART+
+            " WriteOneFilePerWindow expand, resource file: " + resource.getFilename());
     TextIO.Write write =
         TextIO.write()
             .to(new PerWindowFiles(resource))
@@ -72,8 +76,11 @@ public class WriteOneFilePerWindow extends PTransform<PCollection<String>, PDone
       write = write.withNumShards(numShards);
     }
     LOGGER.info(E.ORANGE_HEART+E.ORANGE_HEART+
-            " ... inside expand, writing to GCS: " + write.getName());
-    return input.apply(write);
+            " ... writing pipeline element to GCS: " + write.getName());
+    PDone pDone = input.apply(write);
+    LOGGER.info(E.ORANGE_HEART+E.ORANGE_HEART+
+            " PDone: " + pDone.getPipeline().toString());
+    return pDone;
   }
 
   /**

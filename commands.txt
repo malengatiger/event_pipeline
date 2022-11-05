@@ -18,8 +18,7 @@ java -jar target/event_pipeline-bundled-0.1.jar \
   --region=europe-west1 \
   --tempLocation=gs://thermal-effort-366015/aubsbucket01/temp \
   --output=gs://thermal-effort-366015/aubsbucket01/output \
-  --inputTopic=projects/thermal-effort-366015/topics/eventTopic \
-  --outputTopic=projects/thermal-effort-366015/topics/EventTopic
+  --inputTopic=projects/thermal-effort-366015/topics/eventTopic
 
 
 gcloud projects get-iam-policy $PROJECT  \
